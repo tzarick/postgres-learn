@@ -13,13 +13,22 @@ import (
 	_ "github.com/lib/pq"
 )
 
+type movie struct {
+	title  string
+	length int
+}
+
+type response struct {
+	Item string
+}
+
 func indexHandler(c *fiber.Ctx, db *sql.DB) error {
 	var res string
 	var movieTitles []string
 
 	// display all short film titles
 
-	rows, err := db.Query("SELECT title FROM film WHERE length < 50")
+	rows, err := db.Query("SELECT title FROM user_film_dump WHERE length < 50")
 	if err != nil {
 		log.Fatalln(err)
 		c.JSON("An error occured")
@@ -32,18 +41,48 @@ func indexHandler(c *fiber.Ctx, db *sql.DB) error {
 		movieTitles = append(movieTitles, res)
 	}
 
-	fmt.Printf("movieTitles: %v", len(movieTitles))
+	fmt.Printf("movieTitles: %v\n", len(movieTitles))
 
 	return c.Render("index", fiber.Map{"Movies": movieTitles})
 }
 func postHandler(c *fiber.Ctx, db *sql.DB) error {
-	return c.SendString("post")
+	response := response{}
+	newMovie := movie{}
+
+	// add user input to DB with default length value
+
+	if err := c.BodyParser(&response); err != nil {
+		log.Printf("An error occured: %v", err)
+		return c.SendString(err.Error())
+	}
+
+	newMovie.title = response.Item
+	newMovie.length = 10
+	if newMovie.title != "" {
+		_, err := db.Exec("INSERT into user_film_dump (title, length) VALUES ($1, $2)", newMovie.title, newMovie.length)
+		if err != nil {
+			log.Fatalf("An error occured while executing query: %v", err)
+		}
+	}
+
+	return c.Redirect("/")
 }
 func putHandler(c *fiber.Ctx, db *sql.DB) error {
-	return c.SendString("put")
+	oldTitle := c.Query("oldTitle")
+	newTitle := c.Query("newTitle")
+
+	fmt.Println(oldTitle, newTitle)
+
+	db.Exec("UPDATE user_film_dump SET title = $1 WHERE title = $2", newTitle, oldTitle)
+
+	return c.Redirect("/")
 }
 func deleteHandler(c *fiber.Ctx, db *sql.DB) error {
-	return c.SendString("delete")
+	titleToDelete := c.Query("title")
+
+	db.Exec("DELETE from user_film_dump WHERE title = $1", titleToDelete)
+
+	return c.Redirect("/")
 }
 
 // connect to our postgres DB. Params are specified in .env file. We are using the lib/pq postgres driver package
